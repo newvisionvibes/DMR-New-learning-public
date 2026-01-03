@@ -33,7 +33,7 @@ import pandas as pd
 import streamlit as st
 from modules.blogpage_v2 import blogpage
 from subscription_guard import enforce_subscription_or_logout
-from webhook_cashfree import router as cashfree_router
+
 
 
 
@@ -282,7 +282,8 @@ def load_persistent_session_if_exists():
         st.session_state.username = user["username"]
         st.session_state.user_role = user["role"]
         st.session_state.user_id = user["id"]
-        from subscription_manager import SubscriptionManager
+        from data.subscription_manager import SubscriptionManager
+
              
         sub_mgr = SubscriptionManager()
         st.session_state.has_active_subscription = sub_mgr.has_active_subscription(username)
@@ -411,8 +412,6 @@ def _login_with_store():
 
 
 def check_authentication() -> UserStore:
-    """Ensure user is authenticated and hydrate session using JSON store"""
-
     if not st.session_state.get("authenticated"):
         _login_with_store()
 
@@ -421,27 +420,33 @@ def check_authentication() -> UserStore:
         _login_with_store()
 
     user_store = UserStore()
-    users = user_store.get_all_users()
     user = user_store.get_user(username)
 
     if not user or user.get("status") != "active":
         st.error("❌ Account inactive or deleted. Contact admin.")
-        try:
-            from persistent_sessions import clear_persistent_session
-            clear_persistent_session(username)
-        except Exception:
-            pass
-
+        from persistent_sessions import clear_persistent_session
+        clear_persistent_session(username)
         st.session_state.clear()
         init_session_state()
         st.stop()
 
+    st.session_state.user_id = user["id"]
+    st.session_state.user_role = user["role"]
+
+    from data.subscription_manager import SubscriptionManager
+    sub_mgr = SubscriptionManager()
+    st.session_state.has_active_subscription = sub_mgr.has_active_subscription(username)
+
+    return user_store
     # ✅ Hydrate session from JSON store
     st.session_state.user_id = user["id"]
     st.session_state.user_role = user["role"]
-    st.session_state.has_active_subscription = bool(
-        user.get("has_active_subscription", False)
-    )
+    from subscription_manager import SubscriptionManager
+
+    sub_mgr = SubscriptionManager()
+    st.session_state.has_active_subscription = sub_mgr.has_active_subscription(username)
+
+    
 
     # ✅ RETURN MUST BE INSIDE FUNCTION
     return user_store
@@ -805,6 +810,7 @@ def main():
     try:
         # ✅ CRITICAL: Try to auto-restore persistent session FIRST
         load_persistent_session_if_exists()
+
         
         # Update session activity on every page load
         update_session_activity()
