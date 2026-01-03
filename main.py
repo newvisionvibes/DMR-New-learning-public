@@ -34,7 +34,7 @@ import streamlit as st
 from modules.blogpage_v2 import blogpage
 from subscription_guard import enforce_subscription_or_logout
 from webhook_cashfree import router as cashfree_router
-st._server._fastapi_app.include_router(cashfree_router)
+
 
 
 # ============================================================================
@@ -417,14 +417,12 @@ def check_authentication() -> UserStore:
     if not st.session_state.get("authenticated"):
         _login_with_store()
 
-
     username = st.session_state.get("username")
     if not username:
         _login_with_store()
 
     user_store = UserStore()
     users = user_store.get_all_users()
-
     user = user_store.get_user(username)
 
     if not user or user.get("status") != "active":
@@ -438,17 +436,15 @@ def check_authentication() -> UserStore:
         st.session_state.clear()
         init_session_state()
         st.stop()
-    # Hydrate session from JSON store
+
+    # ✅ Hydrate session from JSON store
     st.session_state.user_id = user["id"]
     st.session_state.user_role = user["role"]
     st.session_state.has_active_subscription = bool(
         user.get("has_active_subscription", False)
     )
-from payments_store import has_successful_payment
 
-if has_successful_payment(username):
-    st.session_state.has_active_subscription = True
-
+    # ✅ RETURN MUST BE INSIDE FUNCTION
     return user_store
 
 

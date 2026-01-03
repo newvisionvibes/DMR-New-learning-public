@@ -2,7 +2,8 @@ from datetime import datetime
 import pytz
 import logging
 
-from subscription_manager import SubscriptionManager
+from data.subscription_manager import SubscriptionManager
+
 from persistent_sessions import clear_persistent_session
 
 IST = pytz.timezone("Asia/Kolkata")
