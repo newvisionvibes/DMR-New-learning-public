@@ -32,6 +32,10 @@ import logging
 import pandas as pd
 import streamlit as st
 from modules.blogpage_v2 import blogpage
+from subscription_guard import enforce_subscription_or_logout
+from webhook_cashfree import router as cashfree_router
+st._server._fastapi_app.include_router(cashfree_router)
+
 
 # ============================================================================
 # LOGGING SETUP
@@ -53,12 +57,8 @@ try:
         render_subscriber_comprehensive_view,
     )
     from data_refresh_tracker import DataRefreshTracker
-    from user_management import (
-        PostgresUserManager,
-        get_user_by_username_db,
-        get_active_subscription_for_user,
-        ensure_subscription_row_for_user,
-    )
+    from user_store import UserStore
+
 except ImportError as e:
     logger.error(f"Import error: {e}")
     st.error(f"Failed to import required modules: {e}")
@@ -250,63 +250,59 @@ init_session_state()
 # ============================================================================
 
 def load_persistent_session_if_exists():
-    """
-    ✅ CRITICAL FIX #2: Auto-login if valid persistent session exists
-    
-    This allows users to stay logged in after:
-    - Browser refresh
-    - App restart
-    - Fly.io VM redeployment
-    - Network interruption
-    """
-    
-    # Only if not already authenticated
     if st.session_state.get("authenticated"):
         return False
-    
-    # Mark that we've done persistence check
+
     if st.session_state.get("persistence_check_done"):
         return False
-    
+
     st.session_state.persistence_check_done = True
-    
-    # Try to load persisted session
+
     username = st.session_state.get("username")
     if not username:
         return False
-    
+
     try:
         from persistent_sessions import load_persistent_session, update_session_activity
-        
+        from user_store import UserStore
+
         session_data = load_persistent_session(username)
-        
-        if session_data:
-            # Valid session found! Auto-restore
-            logger.info(f"✅ Auto-restored persistent session for {username}")
-            st.session_state.authenticated = True
-            st.session_state.username = session_data["username"]
-            st.session_state.user_role = session_data["role"]
-            st.session_state.user_id = session_data.get("user_id")
-            st.session_state.session_created = session_data.get("created")
-            st.session_state.session_expires = session_data.get("expires")
-            st.session_state.last_activity = datetime.now(IST).isoformat()
-            
-            # Update last activity in persistent storage
-            update_session_activity(username)
-            return True
-        else:
-            # No valid persistent session
-            logger.warning(f"❌ No valid persistent session for {username}")
-            st.session_state.authenticated = False
-            st.session_state.username = None
+        if not session_data:
             return False
-            
-    except ImportError:
-        logger.warning("⚠️ persistent_sessions module not available")
-        return False
+
+        user_store = UserStore()
+        user = user_store.get_user(session_data["username"])
+
+        if not user or user.get("status") != "active":
+            logger.warning("Invalid persistent session – user missing/inactive")
+            return False
+
+        # ✅ RESTORE SESSION
+        st.session_state.authenticated = True
+        st.session_state.username = user["username"]
+        st.session_state.user_role = user["role"]
+        st.session_state.user_id = user["id"]
+        from subscription_manager import SubscriptionManager
+             
+        sub_mgr = SubscriptionManager()
+        st.session_state.has_active_subscription = sub_mgr.has_active_subscription(username)
+                                               
+                                           
+                                           
+                            
+
+
+
+        st.session_state.last_activity = datetime.now(IST).isoformat()
+
+        update_session_activity(username)
+        logger.info(f"✅ Persistent session restored for {username}")
+        return True
+
     except Exception as e:
-        logger.error(f"❌ Error loading persistent session: {e}")
+        logger.error(f"Persistent session restore failed: {e}")
         return False
+
 
 # ============================================================================
 # DATA LOADING
@@ -400,26 +396,62 @@ def subscriber_manual_refresh():
 # AUTHENTICATION
 # ============================================================================
 
-def _login_with_postgres():
+def _login_with_store():
     """Check if authenticated, else show landing page"""
     if not st.session_state.get("authenticated"):
         try:
             from landing_page_ENHANCED import render_landing_page
             render_landing_page()
         except ImportError:
-            try:
-                from landing_page import render_landing_page
-                render_landing_page()
-            except Exception as e:
-                logger.error(f"Error rendering landing page: {e}")
-                st.error("Failed to load login page")
-                st.stop()
+            from landing_page import render_landing_page
+            render_landing_page()
+        except Exception as e:
+            logger.error(f"Error rendering landing page: {e}")
+            st.error("Failed to load login page")
+            st.stop()
 
-def check_authentication() -> PostgresUserManager:
-    """Ensure user is authenticated, else show login page"""
+
+def check_authentication() -> UserStore:
+    """Ensure user is authenticated and hydrate session using JSON store"""
+
     if not st.session_state.get("authenticated"):
-        _login_with_postgres()
-    return PostgresUserManager()
+        _login_with_store()
+
+
+    username = st.session_state.get("username")
+    if not username:
+        _login_with_store()
+
+    user_store = UserStore()
+    users = user_store.get_all_users()
+
+    user = user_store.get_user(username)
+
+    if not user or user.get("status") != "active":
+        st.error("❌ Account inactive or deleted. Contact admin.")
+        try:
+            from persistent_sessions import clear_persistent_session
+            clear_persistent_session(username)
+        except Exception:
+            pass
+
+        st.session_state.clear()
+        init_session_state()
+        st.stop()
+    # Hydrate session from JSON store
+    st.session_state.user_id = user["id"]
+    st.session_state.user_role = user["role"]
+    st.session_state.has_active_subscription = bool(
+        user.get("has_active_subscription", False)
+    )
+from payments_store import has_successful_payment
+
+if has_successful_payment(username):
+    st.session_state.has_active_subscription = True
+
+    return user_store
+
+
 
 # ============================================================================
 # ANALYSIS HELPERS
@@ -739,10 +771,7 @@ def render_sidebar_config():
                 del st.session_state[key]
             
             init_session_state()
-            st.success("✅ Logged out successfully")
-            logger.info("User logged out")
-            time.sleep(1)
-            st.rerun()
+            st.experimental_rerun()
 
 # ============================================================================
 # HEADER
@@ -787,7 +816,16 @@ def main():
         
         # Check authentication
         user_manager = check_authentication()
-        
+        # 🔐 PHASE-4.3: Enforce subscription expiry
+        if st.session_state.get("user_role") == "subscriber":
+            ok = enforce_subscription_or_logout(
+                st.session_state.username,
+                st.session_state
+            )
+            if not ok:
+                st.warning("🔒 Your subscription has expired. Please upgrade.")
+                st.experimental_rerun()
+
         # Render UI
         render_sidebar_config()
         render_header()
@@ -811,6 +849,8 @@ def main():
                         "⚠️ streamlit-autorefresh not installed. "
                         "Install with: pip install streamlit-autorefresh"
                     )
+
+
         
         if st.session_state.user_role == "admin":
             # =================== ADMIN VIEW ===================
@@ -917,7 +957,8 @@ def main():
             with admin_nav[3]:
                 st.subheader("👥 User Management")
 
-                users = user_manager.get_all_users()
+                user_store = UserStore()
+                users = user_store.get_all_users()
 
                 if not users:
                     st.info("No users in database yet.")
@@ -994,7 +1035,7 @@ def main():
                                 width="stretch",
                                 key="admin_update_status",
                             ):
-                                user_manager.set_status(
+                                user_store.set_status(
                                     selected["id"], new_status
                                 )
                                 st.success(
@@ -1038,7 +1079,7 @@ def main():
                                             "Password must be at least 6 characters."
                                         )
                                     else:
-                                        user_manager.change_password(
+                                        user_store.change_password(
                                             selected["id"], pwd1
                                         )
                                         st.success(
@@ -1078,7 +1119,7 @@ def main():
                                 "Password must be at least 6 characters."
                             )
                         else:
-                            ok, msg = user_manager.create_user(
+                            ok, msg = user_store.create_user(
                                 username=new_username,
                                 password=new_password,
                                 role=new_role,
@@ -1090,13 +1131,8 @@ def main():
                                     f"{new_username} ({new_role})"
                                 )
                                 if new_role == "subscriber":
-                                    created = get_user_by_username_db(
-                                        new_username
-                                    )
-                                    if created:
-                                        ensure_subscription_row_for_user(
-                                            created["id"]
-                                        )
+                                    user_store.ensure_subscription_flag(created_user=new_username)
+
                                 st.success(msg)
                                 st.rerun()
                             else:
@@ -1140,8 +1176,15 @@ def main():
         else:
             # ================= SUBSCRIBER / VIEWER VIEW =================
             if not st.session_state.get("has_active_subscription", False):
-                st.error("❌ No active subscription. Contact admin.")
+                st.warning("🔒 Premium access required")
+                     
+                if st.button("💳 Upgrade to Premium"):
+                    order_id = f"ORD_{int(time.time())}_{st.session_state.username}"
+                    pay_url = f"https://payments.cashfree.com/checkout?order_id={order_id}"
+                    st.markdown(f"[👉 Click here to Pay ₹999]({pay_url})", unsafe_allow_html=True)
+                      
                 st.stop()
+
             
             load_persisted_analysis_into_session()
             
