@@ -12,6 +12,9 @@ import os
 import json
 import logging
 from datetime import datetime, timedelta  # ✅ NEW: timedelta for expiry timestamps
+from user_store import UserStore
+
+
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -141,22 +144,6 @@ class SubscriptionTracker:
 # USER MANAGEMENT FUNCTIONS (Minimal - calls user_management.py)
 # ============================================================================
 
-def get_user_by_username_db(username: str):
-    """Get user by username from JSON database"""
-    try:
-        from user_management import get_user_by_username_db
-        return get_user_by_username_db(username)
-    except ImportError:
-        st.error("User database not available")
-        return None
-
-def get_active_subscription_for_user(user_id: int):
-    """Get active subscription for user"""
-    try:
-        from user_management import get_active_subscription_for_user
-        return get_active_subscription_for_user(user_id)
-    except ImportError:
-        return None
 
 def ensure_subscription_row_for_user(user_id: int):
     """Ensure subscription row exists for user"""
@@ -430,27 +417,23 @@ def render_login_tab():
             except ImportError:
                 print("⚠️ Cashfree unavailable (login still works)")
             
-            user = get_user_by_username_db(username)
-            
+            user_store = UserStore()
+            user = user_store.get_user(username)
+
             if not user:
                 st.error("❌ Invalid credentials")
                 return
-            
-            if user.get("status") != "active":
+                            
+            if user["status"] != "active":
                 st.error("❌ Account inactive. Contact admin.")
                 return
-            
-            if user.get("password") != password:
+                 
+            if user["password"] != password:
                 st.error("❌ Invalid credentials")
                 return
-            
-            # Check subscription for non-admins
-            if user.get("role") != "admin":
-                sub = get_active_subscription_for_user(user.get("id"))
-                if not sub:
-                    st.error("❌ No active subscription")
-                    st.info("Sign up or renew subscription")
-                    return
+
+# subscription handled later by main.py / guard
+
             
             # ✅ Login success
             st.session_state.authenticated = True
