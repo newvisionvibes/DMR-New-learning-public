@@ -1,0 +1,50 @@
+{
+  "posts": [
+    {
+      "id": "post_1_1767286288",
+      "title": "Testing1",
+      "content": "Testing1",
+      "author": "admin",
+      "frequency": "daily",
+      "category": "Analysis",
+      "status": "published",
+      "created_at": "2026-01-01 22:21:28 IST",
+      "updated_at": "2026-01-01 22:22:21 IST",
+      "views": 0
+    },
+    {
+      "id": "post_2_1767287406",
+      "title": "Testing2",
+      "content": "Testing2",
+      "author": "admin",
+      "frequency": "daily",
+      "category": "Risk Radar: Geopolitics Conflict and Capital",
+      "status": "published",
+      "created_at": "2026-01-01 22:40:06 IST",
+      "updated_at": "2026-01-01 22:40:06 IST",
+      "views": 0
+    },
+    {
+      "id": "post_3_1767339099",
+      "title": "NY stock exchange - Update",
+      "content": "NY stock exchange will be collapsed, Texas Stock exchange will be built for the future",
+      "author": "admin",
+      "frequency": "daily",
+      "category": "Risk Radar: Geopolitics Conflict and Capital",
+      "status": "published",
+      "created_at": "2026-01-02 13:01:39 IST",
+      "updated_at": "2026-01-02 13:01:39 IST",
+      "views": 0
+    }
+  ],
+  "categories": [
+    "Sector News",
+    "ETF Updates",
+    "Market Insights",
+    "Trading Tips",
+    "Analysis",
+    "Risk Radar: Geopolitics Conflict and Capital"
+  ],
+  "created_at": "2026-01-01 21:49:00 IST",
+  "version": "1.0"
+}
