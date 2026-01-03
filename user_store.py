@@ -34,32 +34,41 @@ class UserStore:
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
 
+    # ✅ BACKWARD-COMPATIBILITY SHIM (CRITICAL FIX)
+    def _load_users(self):
+        """
+        Compatibility method.
+        Older code expects _load_users().
+        Users are stored as a LIST in JSON.
+        """
+        return self._load(USERS_FILE)
+
     # ------------------ Users ------------------
 
     def get_user(self, username):
-        users = self._load(USERS_FILE)
+        users = self._load_users()
         return next((u for u in users if u["username"] == username), None)
 
     def get_all_users(self):
-        users = self._load_users()
-        return list(users.values())
+        # ✅ users are already a list
+        return self._load_users()
 
     def set_status(self, user_id, status):
-        users = self._load(USERS_FILE)
+        users = self._load_users()
         for u in users:
             if u["id"] == user_id:
                 u["status"] = status
         self._save(USERS_FILE, users)
 
     def change_password(self, user_id, new_password):
-        users = self._load(USERS_FILE)
+        users = self._load_users()
         for u in users:
             if u["id"] == user_id:
                 u["password"] = new_password
         self._save(USERS_FILE, users)
 
     def create_user(self, username, password, role, email=None):
-        users = self._load(USERS_FILE)
+        users = self._load_users()
 
         if any(u["username"] == username for u in users):
             return False, "Username already exists"
