@@ -438,18 +438,7 @@ def check_authentication() -> UserStore:
     st.session_state.has_active_subscription = sub_mgr.has_active_subscription(username)
 
     return user_store
-    # ✅ Hydrate session from JSON store
-    st.session_state.user_id = user["id"]
-    st.session_state.user_role = user["role"]
-    from subscription_manager import SubscriptionManager
 
-    sub_mgr = SubscriptionManager()
-    st.session_state.has_active_subscription = sub_mgr.has_active_subscription(username)
-
-    
-
-    # ✅ RETURN MUST BE INSIDE FUNCTION
-    return user_store
 
 
 
@@ -959,7 +948,16 @@ def main():
                 st.subheader("👥 User Management")
 
                 user_store = UserStore()
-                users = user_store.get_all_users()
+                raw_users = user_store.get_all_users()
+
+                # ✅ NORMALIZE USERS TO List[Dict]
+                if isinstance(raw_users, dict):
+                    users = list(raw_users.values())
+                elif isinstance(raw_users, list):
+                    users = raw_users
+                else:
+                    users = []
+
 
                 if not users:
                     st.info("No users in database yet.")
