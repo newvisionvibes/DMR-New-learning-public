@@ -397,18 +397,17 @@ def subscriber_manual_refresh():
 # ============================================================================
 
 def _login_with_store():
-    """Check if authenticated, else show landing page"""
-    if not st.session_state.get("authenticated"):
-        try:
-            from landing_page_ENHANCED import render_landing_page
-            render_landing_page()
-        except ImportError:
-            from landing_page import render_landing_page
-            render_landing_page()
-        except Exception as e:
-            logger.error(f"Error rendering landing page: {e}")
-            st.error("Failed to load login page")
-            st.stop()
+    if st.session_state.get("authenticated"):
+        return
+
+    try:
+        from landing_page_ENHANCED import render_landing_page
+    except ImportError:
+        from landing_page import render_landing_page
+
+    render_landing_page()
+    st.stop()
+
 
 
 def check_authentication() -> UserStore:
