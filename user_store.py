@@ -41,7 +41,8 @@ class UserStore:
         return next((u for u in users if u["username"] == username), None)
 
     def get_all_users(self):
-        return self._load(USERS_FILE)
+        users = self._load_users()
+        return list(users.values())
 
     def set_status(self, user_id, status):
         users = self._load(USERS_FILE)

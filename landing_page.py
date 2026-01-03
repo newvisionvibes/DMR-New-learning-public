@@ -413,7 +413,7 @@ def render_login_tab():
     st.subheader("Welcome Back! 👋")
     st.caption("Enter your credentials to access your analysis dashboard")
     
-    with st.form("login_form_landing", clear_on_submit=True):
+    with st.form(key=f"login_form_landing_{st.session_state.get('login_form_id', 'default')}"):
         username = st.text_input("Username", placeholder="Your username")
         password = st.text_input("Password", type="password", placeholder="Your password")
         submit = st.form_submit_button("🔓 Login", width="stretch", type="primary")
