@@ -412,6 +412,7 @@ def _login_with_store():
 
 
 def check_authentication() -> UserStore:
+    # 1️⃣ Ensure user is logged in
     if not st.session_state.get("authenticated"):
         _login_with_store()
 
@@ -419,25 +420,40 @@ def check_authentication() -> UserStore:
     if not username:
         _login_with_store()
 
+    # 2️⃣ Load user from UserStore
     user_store = UserStore()
     user = user_store.get_user(username)
 
+    # 3️⃣ Validate user status
     if not user or user.get("status") != "active":
         st.error("❌ Account inactive or deleted. Contact admin.")
-        from persistent_sessions import clear_persistent_session
-        clear_persistent_session(username)
+
+        try:
+            from persistent_sessions import clear_persistent_session
+            clear_persistent_session(username)
+        except Exception:
+            pass
+
         st.session_state.clear()
         init_session_state()
         st.stop()
 
+    # 4️⃣ Hydrate identity (ONLY identity)
     st.session_state.user_id = user["id"]
     st.session_state.user_role = user["role"]
 
-    from data.subscription_manager import SubscriptionManager
-    sub_mgr = SubscriptionManager()
-    st.session_state.has_active_subscription = sub_mgr.has_active_subscription(username)
+    # 5️⃣ 🔐 PHASE-5.1: PAYMENT AUTHORITY (payments.json ONLY)
+    from payments_store import has_successful_payment
 
+    if st.session_state.user_role == "subscriber":
+        st.session_state.has_active_subscription = has_successful_payment(username)
+    else:
+        # Admin / viewer always allowed
+        st.session_state.has_active_subscription = True
+
+    # 6️⃣ Return store for admin pages
     return user_store
+
 
 
 

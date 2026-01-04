@@ -301,13 +301,7 @@ def create_cashfree_payment_session(username: str, email: str, plan: str):
         st.success("✅ Account created successfully!")
         st.info("Activate subscription anytime from dashboard")
         
-        if st.button("🚀 Login & Explore", type="primary", width="stretch"):
-            # Login fallback (mark as subscriber)
-            st.session_state.authenticated = True
-            st.session_state.username = username
-            st.session_state.user_role = "subscriber"
-            st.session_state.user_id = st.session_state.new_user_id
-            st.session_state.has_active_subscription = True
+            
 
             # ✅ NEW: persist this login too
             save_persistent_session_after_login(
@@ -440,7 +434,7 @@ def render_login_tab():
             st.session_state.username = user.get("username")
             st.session_state.user_role = user.get("role")
             st.session_state.user_id = user.get("id")
-            st.session_state.has_active_subscription = True
+            
 
             # ✅ NEW: save persistent session so main.py can auto‑restore
             save_persistent_session_after_login(
