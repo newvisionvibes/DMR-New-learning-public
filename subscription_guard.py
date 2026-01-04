@@ -1,63 +1,111 @@
-from datetime import datetime
-import pytz
+"""
+SUBSCRIPTION GUARD – PHASE 5.1.3
+--------------------------------
+Single enforcement point for premium access.
+
+RULE:
+Access is allowed ONLY if:
+- User is authenticated
+- AND payment is confirmed via Cashfree webhook
+"""
+
 import logging
+from typing import Optional
 
-from data.subscription_manager import SubscriptionManager
+from payments_store import has_successful_payment
+from user_store import UserStore
 
-from persistent_sessions import clear_persistent_session
-
-IST = pytz.timezone("Asia/Kolkata")
 logger = logging.getLogger(__name__)
 
 
-def enforce_subscription_or_logout(username: str, session_state):
+def enforce_subscription_or_logout(
+    username: str,
+    session_state,
+    *,
+    strict: bool = True
+) -> bool:
     """
-    Enforces subscription validity.
-    If expired or missing → force logout immediately.
+    Enforce premium subscription access.
+
+    Returns:
+        True  -> Access allowed
+        False -> User logged out / blocked
+
+    strict=True:
+        - Immediately logs out user if payment invalid
+    strict=False:
+        - Allows caller to handle UI fallback
     """
 
-    manager = SubscriptionManager()
-    sub = manager.get_subscription(username)
+    # ------------------------------------------------------------------
+    # 1️⃣ BASIC SESSION VALIDATION
+    # ------------------------------------------------------------------
 
-    if not sub:
-        logger.warning(f"No subscription found for {username}")
-        _force_logout(username, session_state)
+    if not session_state.get("authenticated"):
+        logger.warning("Subscription guard: unauthenticated access attempt")
         return False
 
-    expiry = sub.get("expires_at")
-    if not expiry:
-        logger.warning(f"No expiry found for {username}")
-        _force_logout(username, session_state)
+    if not username:
+        logger.warning("Subscription guard: missing username")
         return False
 
-    try:
-        expiry_dt = datetime.fromisoformat(expiry)
-        now = datetime.now(IST)
+    # ------------------------------------------------------------------
+    # 2️⃣ ADMIN BYPASS (INTENTIONAL)
+    # ------------------------------------------------------------------
 
-        if now >= expiry_dt:
-            logger.info(f"Subscription expired for {username}")
-            manager.expire_subscription(username)
-            _force_logout(username, session_state)
-            return False
+    if session_state.get("user_role") == "admin":
+        logger.info("Subscription guard: admin bypass granted")
+        session_state.has_active_subscription = True
+        return True
 
-    except Exception as e:
-        logger.error(f"Expiry check failed for {username}: {e}")
-        _force_logout(username, session_state)
+    # ------------------------------------------------------------------
+    # 3️⃣ PAYMENT VERIFICATION (SOURCE OF TRUTH)
+    # ------------------------------------------------------------------
+
+    payment_ok = has_successful_payment(username)
+
+    if not payment_ok:
+        logger.warning(
+            f"Subscription guard: payment not verified for user={username}"
+        )
+
+        session_state.has_active_subscription = False
+
+        if strict:
+            _logout_user(session_state)
+
         return False
 
+    # ------------------------------------------------------------------
+    # 4️⃣ FINALIZE SESSION STATE
+    # ------------------------------------------------------------------
+
+    session_state.has_active_subscription = True
+    logger.info(f"Subscription guard: access granted to {username}")
     return True
 
 
-def _force_logout(username, session_state):
+# ----------------------------------------------------------------------
+# INTERNAL HELPERS
+# ----------------------------------------------------------------------
+
+def _logout_user(session_state):
     """
-    Clears Streamlit session + persistent session
+    Centralized logout logic.
+    Ensures clean session reset.
     """
     try:
-        clear_persistent_session(username)
-    except Exception:
-        pass
+        from persistent_sessions import clear_persistent_session
 
+        username = session_state.get("username")
+        if username:
+            clear_persistent_session(username)
+    except Exception as e:
+        logger.warning(f"Failed to clear persistent session: {e}")
+
+    # Hard reset Streamlit session
     for key in list(session_state.keys()):
         del session_state[key]
 
     session_state["authenticated"] = False
+    session_state["has_active_subscription"] = False

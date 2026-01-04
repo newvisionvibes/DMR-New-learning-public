@@ -201,16 +201,3 @@ def verify_and_activate_subscription(
             "success": False,
             "message": f"Error: {str(e)}"
         }
-
-def is_payment_confirmed(order_id: str) -> bool:
-    with open("data/payments.json", "r") as f:
-        payments = json.load(f)
-
-    record = payments.get(order_id)
-    if not record:
-        return False
-
-    return (
-        record.get("status") == "SUCCESS"
-        and record.get("verified_by") == "cashfree_webhook"
-    )
