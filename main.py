@@ -820,18 +820,26 @@ def main():
         # Update session activity on every page load
         update_session_activity()
         
-        # Check authentication
-        user_manager = check_authentication()
-        # 🔐 PHASE-4.3: Enforce subscription expiry
-        if st.session_state.get("user_role") == "subscriber":
-            ok = enforce_subscription_or_logout(
-                st.session_state.username,
-                st.session_state
-            )
-            if not ok:
-                st.warning("🔒 Your subscription has expired. Please upgrade.")
-                st.experimental_rerun()
+# Check authentication
+user_manager = check_authentication()
 
+# 🔐 PHASE-5.2: Enforce subscription expiry (JSON-ledger based)
+if st.session_state.get("user_role") == "subscriber":
+    ok = enforce_subscription_or_logout(
+        st.session_state.username,
+        st.session_state
+    )
+
+    if not ok:
+        st.warning("🔒 Your subscription has expired. Please upgrade.")
+        if st.button("💳 Upgrade to Premium", key="expired_upgrade_btn"):
+            order_id = f"ORD_{int(time.time())}_{st.session_state.username}"
+            pay_url = f"https://payments.cashfree.com/checkout?order_id={order_id}"
+            st.markdown(
+                f"[👉 Click here to Pay ₹999]({pay_url})",
+                unsafe_allow_html=True,
+            )
+        st.stop()
         # Render UI
         render_sidebar_config()
         render_header()

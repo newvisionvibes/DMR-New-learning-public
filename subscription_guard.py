@@ -1,3 +1,7 @@
+from payments_store import has_active_subscription, days_left
+import streamlit as st
+
+
 """
 SUBSCRIPTION GUARD – PHASE 5.1.3
 --------------------------------
@@ -18,24 +22,15 @@ from user_store import UserStore
 logger = logging.getLogger(__name__)
 
 
-def enforce_subscription_or_logout(
-    username: str,
-    session_state,
-    *,
-    strict: bool = True
-) -> bool:
-    """
-    Enforce premium subscription access.
+def enforce_subscription_or_logout(username: str, session_state) -> bool:
+    if not has_active_subscription(username):
+        session_state.has_active_subscription = False
+        return False
 
-    Returns:
-        True  -> Access allowed
-        False -> User logged out / blocked
+    session_state.has_active_subscription = True
+    session_state.subscription_days_left = days_left(username)
+    return True
 
-    strict=True:
-        - Immediately logs out user if payment invalid
-    strict=False:
-        - Allows caller to handle UI fallback
-    """
 
     # ------------------------------------------------------------------
     # 1️⃣ BASIC SESSION VALIDATION
